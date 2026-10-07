@@ -71,7 +71,10 @@ def create_handler(service, rules, static_dir):
                 status = 400
             else:
                 status = 500
-            self._send(status, {"error": str(exc), "type": type(exc).__name__})
+            payload = {"error": str(exc), "type": type(exc).__name__}
+            if getattr(exc, "details", None):
+                payload["details"] = exc.details
+            self._send(status, payload)
 
         def do_GET(self):
             try:
@@ -85,6 +88,17 @@ def create_handler(service, rules, static_dir):
                         return self._send_html(200, handle.read())
                 if parts == ["api", "audit"]:
                     return self._send(200, {"items": service.audit_log()})
+                if parts == ["api", "ledger"] and parsed.path.count("/") == 2:
+                    query = parse_qs(parsed.query)
+                    return self._send(200, {"items": service.ledger_list(
+                        loop_id=query.get("loop_id", [None])[0],
+                        status=query.get("status", [None])[0],
+                        change_id=query.get("change_id", [None])[0],
+                    )})
+                if len(parts) == 4 and parts[:3] == ["api", "ledger", "loops"]:
+                    return self._send(200, service.ledger_detail(parts[3]))
+                if len(parts) == 4 and parts[:2] == ["api", "batches"]:
+                    return self._send(200, service.batch_detail(parts[3]))
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api":

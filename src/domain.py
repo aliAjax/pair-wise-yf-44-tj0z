@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class DomainError(Exception):
@@ -21,6 +21,10 @@ class NotFoundError(DomainError):
 
 class ConflictError(DomainError):
     """A version or uniqueness constraint was violated."""
+
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details
 
 
 class InvalidTransition(DomainError):

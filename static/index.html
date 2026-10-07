@@ -18,9 +18,14 @@
   <p><button onclick="checkHealth()">检查服务状态</button></p>
   <pre id="result">等待操作</pre>
   <h2>常用接口</h2>
-  <pre>GET  /health
-GET  /api/&lt;kind&gt;
-POST /api/&lt;kind&gt;
+  <pre>POST /api/loops                 登记仪表回路（量程、仪表版本）
+POST /api/changes               建变更单；revise 动作登记回路定值
+POST /api/tests                 登记功能试验（依据变更版本+仪表版本）
+POST /api/batches               建投产批次；submit 动作逐项复算签认
+GET  /api/batches/&lt;id&gt;          批次与每回路复算明细（问题码）
+GET  /api/ledger?status=active  当前生效账
+GET  /api/ledger/loops/&lt;id&gt;     回路详情：有效版本、来源、待复核、未完成项
+GET  /api/reviews?status=pending 待复核
 GET  /api/entities/&lt;id&gt;
 POST /api/entities/&lt;id&gt;/actions</pre>
 </main>
