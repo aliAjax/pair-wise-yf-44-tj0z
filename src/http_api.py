@@ -5,6 +5,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .domain import (
+    CommissionBlocked,
+    ConcurrentEditConflict,
     ConflictError,
     DomainError,
     InvalidTransition,
@@ -71,7 +73,14 @@ def create_handler(service, rules, static_dir):
                 status = 400
             else:
                 status = 500
-            self._send(status, {"error": str(exc), "type": type(exc).__name__})
+            payload = {"error": str(exc), "type": type(exc).__name__}
+            if isinstance(exc, ConcurrentEditConflict):
+                payload["current"] = exc.current
+                payload["conflicts"] = exc.conflicts
+            if isinstance(exc, CommissionBlocked):
+                payload["failures"] = exc.failures
+                payload["batch_id"] = exc.batch["id"] if exc.batch else None
+            self._send(status, payload)
 
         def do_GET(self):
             try:
@@ -85,6 +94,11 @@ def create_handler(service, rules, static_dir):
                         return self._send_html(200, handle.read())
                 if parts == ["api", "audit"]:
                     return self._send(200, {"items": service.audit_log()})
+                if parts == ["api", "ledger"]:
+                    query = parse_qs(parsed.query)
+                    change_id = query.get("change_id", [None])[0]
+                    loop_id = query.get("loop_id", [None])[0]
+                    return self._send(200, {"items": service.effective(change_id, loop_id)})
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api":
@@ -138,6 +152,29 @@ def create_handler(service, rules, static_dir):
                         200,
                         service.transition(actor, parts[2], parts[3], self._body(), None),
                     )
+                if parts == ["api", "commission_batches"]:
+                    body = self._body()
+                    return self._send(
+                        201,
+                        service.commission(
+                            actor,
+                            body["change_id"],
+                            body.get("loop_ids"),
+                            self.headers.get("Idempotency-Key"),
+                        ),
+                    )
+                if len(parts) == 4 and parts[:2] == ["api", "commission_batches"] and parts[3] == "retry":
+                    return self._send(200, service.retry_commission(actor, parts[2]))
+                if len(parts) == 4 and parts[:2] == ["api", "loops"] and parts[3] == "edit":
+                    body = self._body()
+                    return self._send(
+                        200,
+                        service.update_loop(
+                            actor, parts[2], body.get("data", body), body.get("expected_version")
+                        ),
+                    )
+                if len(parts) == 4 and parts[:2] == ["api", "loops"] and parts[3] == "tests":
+                    return self._send(201, service.record_test(actor, parts[2], self._body()))
                 if len(parts) == 2 and parts[0] == "api":
                     body = self._body()
                     idem = self.headers.get("Idempotency-Key")

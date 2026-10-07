@@ -54,6 +54,15 @@ class SQLiteRepository:
                     created_at TEXT NOT NULL,
                     PRIMARY KEY(actor_id, idem_key)
                 );
+                CREATE TABLE IF NOT EXISTS commission_signoffs (
+                    batch_id TEXT NOT NULL,
+                    loop_id TEXT NOT NULL,
+                    signed_by TEXT NOT NULL,
+                    signed_at TEXT NOT NULL,
+                    PRIMARY KEY(batch_id, loop_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_signoffs_batch
+                    ON commission_signoffs(batch_id);
             """)
 
     @staticmethod
@@ -195,6 +204,34 @@ class SQLiteRepository:
                 "VALUES (?, ?, ?, ?)",
                 (actor_id, idem_key, entity_id, utcnow()),
             )
+
+    def add_signoff(self, batch_id, loop_id, signed_by):
+        """Persist one loop's sign-off. Returns True if newly inserted, False if
+        it already existed (idempotent: retrying a batch never re-signs a loop)."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO commission_signoffs(batch_id, loop_id, signed_by, signed_at) "
+                "VALUES (?, ?, ?, ?)",
+                (batch_id, loop_id, signed_by, utcnow()),
+            )
+            return cursor.rowcount > 0
+
+    def list_signoffs(self, batch_id):
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT batch_id, loop_id, signed_by, signed_at "
+                "FROM commission_signoffs WHERE batch_id = ? ORDER BY rowid",
+                (batch_id,),
+            ).fetchall()
+        return [
+            {
+                "batch_id": row["batch_id"],
+                "loop_id": row["loop_id"],
+                "signed_by": row["signed_by"],
+                "signed_at": row["signed_at"],
+            }
+            for row in rows
+        ]
 
     def ping(self):
         with self._connect() as connection:

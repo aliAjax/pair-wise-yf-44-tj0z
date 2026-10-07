@@ -23,6 +23,32 @@ class ConflictError(DomainError):
     """A version or uniqueness constraint was violated."""
 
 
+class ConcurrentEditConflict(ConflictError):
+    """Optimistic-lock failure on a record someone else already changed.
+
+    Carries the current record and the list of field names that conflicted,
+    so the later submitter can see the live values instead of a bare error.
+    """
+
+    def __init__(self, message, current=None, conflicts=None):
+        super().__init__(message)
+        self.current = current
+        self.conflicts = conflicts or []
+
+
+class CommissionBlocked(ConflictError):
+    """Commissioning recompute found loops that are not ready.
+
+    ``failures`` is a list of per-loop failure dicts (loop_id, tag, code,
+    message) so the caller can see exactly which loop blocked the submit.
+    """
+
+    def __init__(self, message, failures=None, batch=None):
+        super().__init__(message)
+        self.failures = failures or []
+        self.batch = batch
+
+
 class InvalidTransition(DomainError):
     """The requested state transition is not valid."""
 
